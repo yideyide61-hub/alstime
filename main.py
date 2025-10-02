@@ -12,8 +12,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Environment variables
-BOT_OWNER_ID = 7124683213   # replace with your Telegram ID
-TOKEN
+BOT_OWNER_ID = 7124683213  # replace with your Telegram ID
+
 # Load token from Render environment variable
 TOKEN = os.getenv("BOT_TOKEN")
 
@@ -53,3 +53,4 @@ def home():
 if __name__ == "__main__":
     import asyncio
     asyncio.run(application.run_polling())
+

@@ -1,7 +1,7 @@
 import os
 import logging
-from flask import Flask
-from telegram import Update
+from flask import Flask, request
+from telegram import Update, ChatMember
 from telegram.ext import Application, ChatMemberHandler, ContextTypes
 
 # Logging
@@ -13,8 +13,6 @@ logger = logging.getLogger(__name__)
 
 # Environment variables
 BOT_OWNER_ID = 7124683213  # replace with your Telegram ID
-
-# Load token from Render environment variable
 TOKEN = os.getenv("BOT_TOKEN")
 
 if not TOKEN:
@@ -26,10 +24,11 @@ app = Flask(__name__)
 # Telegram bot application
 application = Application.builder().token(TOKEN).build()
 
-# === Handler to check who added the bot ===
+
+# === Handler: check who added the bot ===
 async def check_who_added(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    member = update.my_chat_member
-    if member.new_chat_member.user.id == context.bot.id:
+    member: ChatMember = update.my_chat_member
+    if member.new_chat_member.user.id == context.bot.id:  # bot was added
         chat_id = member.chat.id
         adder = member.from_user
         chat_title = member.chat.title if member.chat.title else "Private Chat"
@@ -37,20 +36,40 @@ async def check_who_added(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info(f"✅ Bot added to group: {chat_title} (id={chat_id})")
         logger.info(f"👤 Added by: {adder.full_name} (id={adder.id}, username=@{adder.username})")
 
-        # Restrict who can add the bot
-        if adder.id != BOT_OWNER_ID:
+        try:
+            # Get adder's status in the group (creator, admin, member, etc.)
+            adder_status = (await context.bot.get_chat_member(chat_id, adder.id)).status
+        except Exception as e:
+            logger.error(f"⚠️ Could not fetch adder's status: {e}")
+            adder_status = None
+
+        # Only allow if group owner/creator, administrator, or BOT_OWNER_ID
+        if adder.id == BOT_OWNER_ID or adder_status in ["creator", "administrator"]:
+            logger.info("✅ Allowed: Bot stays in the group.")
+        else:
+            logger.warning("⛔ Not allowed: Leaving the group.")
             await context.bot.leave_chat(chat_id)
+
 
 # Register handler
 application.add_handler(ChatMemberHandler(check_who_added, ChatMemberHandler.MY_CHAT_MEMBER))
 
-# Flask route (for health check in Render)
+
+# Flask route (health check)
 @app.route("/")
 def home():
     return "Bot is running on Render!", 200
 
-# Start polling when running locally
+
+# Webhook route (for Render deployment)
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    application.update_queue.put_nowait(update)
+    return "ok", 200
+
+
+# Local testing (polling)
 if __name__ == "__main__":
     import asyncio
     asyncio.run(application.run_polling())
-

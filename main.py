@@ -64,12 +64,15 @@ def home():
 # Webhook route (for Render deployment)
 @app.route(f"/{TOKEN}", methods=["POST"])
 def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
+    from flask import request
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
     application.update_queue.put_nowait(update)
-    return "ok", 200
+    return "OK", 200
 
 
 # Local testing (polling)
 if __name__ == "__main__":
     import asyncio
     asyncio.run(application.run_polling())
+

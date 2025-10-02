@@ -1,18 +1,17 @@
 import os
 from flask import Flask
-from telegram import Update, Bot
+from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
-import asyncio
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("BOT_TOKEN", "8466271055:AAEuITQNe4DXvSX2GFybR0oB-2cPmnc6Hs8")
 OWNER_ID = 7124683213
 
-# Flask app for Render
+# Flask app (for Render health check)
 app = Flask(__name__)
 
-# Telegram bot
-bot = Bot(token=TOKEN)
-application = Application.builder().token(TOKEN).build()
+@app.route("/")
+def index():
+    return "✅ Bot is running on Render!"
 
 # Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -21,18 +20,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("❌ You are not my owner!")
 
-application.add_handler(CommandHandler("start", start))
+def main():
+    # Build application
+    application = Application.builder().token(TOKEN).build()
 
-# Flask route to keep alive
-@app.route("/")
-def index():
-    return "Bot is running on Render!"
+    # Add command handlers
+    application.add_handler(CommandHandler("start", start))
 
-# Setup webhook
-@app.before_first_request
-def set_webhook():
-    url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    asyncio.get_event_loop().create_task(bot.set_webhook(url))
+    # Webhook settings
+    port = int(os.environ.get("PORT", 10000))
+    render_hostname = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+    webhook_url = f"https://{render_hostname}/{TOKEN}"
+
+    # Run webhook (async server built-in)
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        url_path=TOKEN,
+        webhook_url=webhook_url
+    )
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    main()

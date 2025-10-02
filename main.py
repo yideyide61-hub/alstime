@@ -1,66 +1,38 @@
 import os
-import logging
-from flask import Flask, request
+from flask import Flask
 from telegram import Update, Bot
-from telegram.ext import Application, ChatMemberHandler, ContextTypes
+from telegram.ext import Application, CommandHandler, ContextTypes
+import asyncio
 
-# Logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
+TOKEN = os.getenv("BOT_TOKEN")
+OWNER_ID = 7124683213
 
-# === CONFIG ===
-BOT_OWNER_ID = 7124683213   # your Telegram ID
-TOKEN = os.getenv("BOT_TOKEN")  # Load from Render Environment Variables
-
-if not TOKEN:
-    raise ValueError("❌ BOT_TOKEN not set in Render environment variables")
-
-# Flask app
+# Flask app for Render
 app = Flask(__name__)
 
-# Telegram bot application
+# Telegram bot
+bot = Bot(token=TOKEN)
 application = Application.builder().token(TOKEN).build()
 
-# === Handler: check who added bot ===
-async def check_who_added(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    member = update.my_chat_member
-    if member.new_chat_member.user.id == context.bot.id:
-        chat_id = member.chat.id
-        adder = member.from_user
-        chat_title = member.chat.title if member.chat.title else "Private Chat"
+# Start command
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id == OWNER_ID:
+        await update.message.reply_text("✅ Hello Owner! Bot is active.")
+    else:
+        await update.message.reply_text("❌ You are not my owner!")
 
-        logger.info(f"✅ Bot added to group: {chat_title} (id={chat_id})")
-        logger.info(f"👤 Added by: {adder.full_name} (id={adder.id}, username=@{adder.username})")
+application.add_handler(CommandHandler("start", start))
 
-        if adder.id == BOT_OWNER_ID:
-            await context.bot.send_message(chat_id, "🤖 Bot added by my owner. Ready to work!")
-        else:
-            await context.bot.send_message(chat_id, "⛔ Only my owner can add me. Leaving...")
-            await context.bot.leave_chat(chat_id)
-
-# Register handler
-application.add_handler(ChatMemberHandler(check_who_added, ChatMemberHandler.MY_CHAT_MEMBER))
-
-# === Webhook endpoint ===
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    update = Update.de_json(request.get_json(force=True), application.bot)
-    application.update_queue.put_nowait(update)
-    return "ok", 200
-
+# Flask route to keep alive
 @app.route("/")
-def home():
-    return "Bot is running on Render!", 200
+def index():
+    return "Bot is running on Render!"
 
-# Run with webhook
-if __name__ == "__main__":
-    import asyncio
-
-    bot = Bot(TOKEN)
+# Setup webhook
+@app.before_first_request
+def set_webhook():
     url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+    asyncio.get_event_loop().create_task(bot.set_webhook(url))
 
-    asyncio.run(bot.set_webhook(url=url))
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)

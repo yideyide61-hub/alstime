@@ -1,7 +1,7 @@
 import os
 import logging
 from flask import Flask, request
-from telegram import Update
+from telegram import Update, Bot
 from telegram.ext import Application, ChatMemberHandler, ContextTypes
 
 # Logging
@@ -13,7 +13,10 @@ logger = logging.getLogger(__name__)
 
 # === CONFIG ===
 BOT_OWNER_ID = 7124683213   # your Telegram ID
-TOKEN = "8466271055:AAEuITQNe4DXvSX2GFybR0oB-2cPmnc6Hs8"
+TOKEN = os.getenv("BOT_TOKEN")  # Load from Render Environment Variables
+
+if not TOKEN:
+    raise ValueError("❌ BOT_TOKEN not set in Render environment variables")
 
 # Flask app
 app = Flask(__name__)
@@ -48,17 +51,16 @@ def webhook():
     application.update_queue.put_nowait(update)
     return "ok", 200
 
-# === Webhook route for Telegram ===
-@app.route(f"/{TOKEN}", methods=["POST"])
-def webhook():
-    data = request.get_json(force=True)
-    update = Update.de_json(data, application.bot)
-    application.update_queue.put_nowait(update)
-    return "OK", 200
-
-# Health check
 @app.route("/")
 def home():
     return "Bot is running on Render!", 200
 
+# Run with webhook
+if __name__ == "__main__":
+    import asyncio
 
+    bot = Bot(TOKEN)
+    url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
+
+    asyncio.run(bot.set_webhook(url=url))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))

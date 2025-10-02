@@ -48,19 +48,17 @@ def webhook():
     application.update_queue.put_nowait(update)
     return "ok", 200
 
+# === Webhook route for Telegram ===
+@app.route(f"/{TOKEN}", methods=["POST"])
+def webhook():
+    data = request.get_json(force=True)
+    update = Update.de_json(data, application.bot)
+    application.update_queue.put_nowait(update)
+    return "OK", 200
+
+# Health check
 @app.route("/")
 def home():
     return "Bot is running on Render!", 200
 
-# Run with webhook
-if __name__ == "__main__":
-    import asyncio
-    from telegram import Bot
 
-    bot = Bot(TOKEN)
-
-    # Set webhook (Render gives us PORT + HOST)
-    url = f"https://{os.environ.get('RENDER_EXTERNAL_HOSTNAME')}/{TOKEN}"
-    asyncio.run(bot.set_webhook(url=url))
-
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
